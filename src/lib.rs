@@ -31,7 +31,7 @@ impl fmt::Display for SchemaStateError {
 
 impl Error for SchemaStateError {}
 
-pub struct Schema {
+pub struct EnsureSchema {
     pub name: String,
     /// Query to run to see if we need to do anything; rows provided by this query are passed to
     /// ensure function
@@ -40,12 +40,22 @@ pub struct Schema {
     /// returned then nothing needs to be done otherwise each returned query is executed
     ensure: Box<dyn for<'h, 'c> Fn(ResultSet<'h, 'c, ValueRow, Executed, DefaultConfiguration>) -> Result<Vec<Sql>, Problem>>,
     /// If there are queries to be run then this Schemas are ensured first
-    meet_require: Vec<Schema>,
+    meet_require: Vec<EnsureSchema>,
 }
 
-impl Schema {
-    pub fn new(name: String, check_query: Sql, ensure: impl for<'h, 'c> Fn(ResultSet<'h, 'c, ValueRow, Executed, DefaultConfiguration>) -> Result<Vec<Sql>, Problem> + 'static) -> Schema {
-        Schema {
+impl fmt::Debug for EnsureSchema {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        fmt.debug_struct("EnsureSchema")
+            .field("name", &self.name)
+            .field("check_query", &self.check_query)
+            .field("meet_require", &self.meet_require)
+            .finish()
+    }
+}
+
+impl EnsureSchema {
+    pub fn new(name: String, check_query: Sql, ensure: impl for<'h, 'c> Fn(ResultSet<'h, 'c, ValueRow, Executed, DefaultConfiguration>) -> Result<Vec<Sql>, Problem> + 'static) -> EnsureSchema {
+        EnsureSchema {
             name,
             check_query,
             ensure: Box::new(ensure),
@@ -53,7 +63,7 @@ impl Schema {
         }
     }
 
-    pub fn with_bool_check(name: String, check_query: Sql, meet_queries: Vec<Sql>) -> Schema {
+    pub fn with_bool_check(name: String, check_query: Sql, meet_queries: Vec<Sql>) -> EnsureSchema {
         Self::new(name, check_query, move |rows| {
             let result: bool = TryFromValueRow::try_from_value_row(rows.single()?)?;
             Ok(if result {
@@ -64,7 +74,7 @@ impl Schema {
         })
     }
 
-    pub fn with_meet_require(mut self, schema: Schema) -> Schema {
+    pub fn with_meet_require(mut self, schema: EnsureSchema) -> EnsureSchema {
         self.meet_require.push(schema);
         self
     }
